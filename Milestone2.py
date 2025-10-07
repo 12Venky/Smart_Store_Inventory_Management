@@ -14,20 +14,13 @@ from sklearn.preprocessing import MinMaxScaler
 
 warnings.filterwarnings("ignore")
 
-# -----------------------------
-# 1. Load Cleaned Data
-# -----------------------------
-df = pd.read_csv("cleaned_retail_data.csv")  # update path if needed
+df = pd.read_csv("cleaned_retail_data.csv")  
 
-# Ensure Date is datetime
 df["Date"] = pd.to_datetime(df["Date"])
 
 os.makedirs("models", exist_ok=True)
 os.makedirs("data", exist_ok=True)
 
-# -----------------------------
-# 2. Helper — LSTM Training
-# -----------------------------
 def train_lstm(series, n_lags=7, epochs=10):
     """Train simple LSTM on 1D series"""
     scaler = MinMaxScaler(feature_range=(0, 1))
@@ -63,9 +56,7 @@ def forecast_lstm(model, scaler, series, steps=30, n_lags=7):
     preds = scaler.inverse_transform(np.array(preds).reshape(-1, 1)).flatten()
     return preds
 
-# -----------------------------
-# 3. Forecast for All Products
-# -----------------------------
+
 forecast_list = []
 all_products = df["Product ID"].unique()
 
@@ -74,7 +65,6 @@ for product_name in all_products:
 
     product_df = df[df['Product ID'] == product_name][["Date", 'Units Sold']]
 
-    # ---------- Prophet ----------
     prophet_df = product_df.rename(columns={"Date": 'ds', 'Units Sold': 'y'})
     model_prophet = Prophet(yearly_seasonality=True, weekly_seasonality=True)
     model_prophet.fit(prophet_df)
@@ -82,7 +72,7 @@ for product_name in all_products:
     forecast_p = model_prophet.predict(future)
     yhat_prophet = forecast_p['yhat'][-30:]
 
-    # ---------- LSTM ----------
+
     sales_series = product_df.set_index("Date")['Units Sold']
     train_size = int(len(sales_series) * 0.8)
     train_series = sales_series.iloc[:train_size]
@@ -90,7 +80,7 @@ for product_name in all_products:
     lstm_model, scaler = train_lstm(train_series)
     yhat_lstm = forecast_lstm(lstm_model, scaler, sales_series, steps=30)
 
-    # ---------- Evaluation ----------
+    
     actual = sales_series[-30:] if len(sales_series) >= 30 else sales_series
 
     mae_prophet = mean_absolute_error(actual, yhat_prophet[:len(actual)])
@@ -102,7 +92,7 @@ for product_name in all_products:
     print(f"Prophet MAE:{mae_prophet:.2f} RMSE:{rmse_prophet:.2f}")
     print(f"LSTM MAE:{mae_lstm:.2f} RMSE:{rmse_lstm:.2f}")
 
-    # ---------- Choose Best ----------
+    
     if rmse_lstm < rmse_prophet:
         print("✅ LSTM better, saving LSTM predictions.")
         best_forecast = yhat_lstm
@@ -114,7 +104,7 @@ for product_name in all_products:
         with open(f"models/prophet_model_{product_name}.pkl", "wb") as f:
             pickle.dump(model_prophet, f)
 
-    # ---------- Save Forecast ----------
+
     forecast_dates = pd.date_range(
         start=product_df["Date"].max() + pd.Timedelta(days=1),
         periods=30
@@ -128,10 +118,9 @@ for product_name in all_products:
 
     forecast_list.append(temp)
 
-# -----------------------------
-# 4. Combine and Save
-# -----------------------------
+
 forecast_all = pd.concat(forecast_list)
 forecast_all.to_csv("data/forecast_results.csv", index=False)
 
 print("\n✅ Forecast results saved with Prophet & LSTM comparison in data/forecast_results.csv")
+
